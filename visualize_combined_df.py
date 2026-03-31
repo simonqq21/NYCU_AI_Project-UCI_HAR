@@ -4,12 +4,20 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, TextBox
 from pathlib import Path 
 
+from scipy.signal import medfilt, butter, filtfilt
+
 # Assuming df_resampled is your 50Hz synced dataframe 
 dataset_dir = Path("./raw_dataset/")
-
+time_series_dir = f""
 # Set experiment type and index 
 experiment_type = "cycling"
 experiment_index = 1
+'''
+filepath strings
+final_dataset/train/time_series/cycling_1/cycling_1_acc_x.csv 
+final_dataset/{train_test}/{time_series_or_features}/{experiment_type}_{experiment_index}/{experiment_type}_{experiment_index}_acc_x.csv 
+Path("./final_dataset")
+'''
 experiment_name = f"{experiment_type}_{experiment_index}"
 window_size=128
 
@@ -20,12 +28,86 @@ starting_indices = []
 df_resampled = pd.read_csv(Path(dataset_dir, f'{experiment_name}_combined_resampled.csv'))
 
 
-            
-# functions to compute for features 
+'''
+functions to compute for features 
+Butterworth filter 
 
+acc_x, acc_y, acc_z, rot_x, rot_y, rot_z 
 
+time domain
+mean
+stdev
+MAD 
+SMA
+energy 
+IQR
+entropy 
+correlation 
 
+frequency domain 
+dominant frequency 
+spectral energy 
+skewness 
+curtosis 
+mean frequency 
+
+gravity angles 
+'''            
+
+'''
+denoise and filter accelerometer signals 
+median filter for initial filtering
+20 Hz lowpass butterworth filter for high frequency noise
+0.3 Hz lowpass butterworth filter for gravity
+'''
+# accelerometer signal denoises and filters out 
+def denoise_accl_signal(data, fs=50, order=3):
+    nyq = 0.5 * fs
+
+    # 1. Apply Median Filter (kernel size 3 or 5 is standard)
+    median_filtered = medfilt(data, kernel_size=3)
+
+    # 2. Apply Low-Pass Butterworth Filter
+    # 20 Hz default cutoff frequency
+    cutoff=20
+    low = cutoff / nyq
+    b_noise, a_noise = butter(order, low, btype='low')
+    total_acc = filtfilt(b_noise, a_noise, median_filtered)
     
+    # 3. Apply Low-Pass Butterworth Filter
+    # 0.3 Hz default cutoff frequency
+    cutoff=0.3
+    low = cutoff / nyq
+    b_grav, a_grav = butter(order, low, btype='low')
+    gravity = filtfilt(b_grav, a_grav, total_acc)
+
+    body_acc = total_acc - gravity
+
+    return body_acc, gravity 
+
+'''
+denoise and filter gyroscope signals 
+median filter for initial filtering
+20 Hz lowpass butterworth filter for high frequency noise
+'''
+def denoise_gyro_signal(data, fs=50, order=3):
+    nyq = 0.5 * fs
+
+    # 1. Apply Median Filter (kernel size 3 or 5 is standard)
+    median_filtered = medfilt(data, kernel_size=3)
+
+    # 2. Apply Low-Pass Butterworth Filter
+    # 20 Hz default cutoff frequency
+    cutoff=20
+    low = cutoff / nyq
+    b_noise, a_noise = butter(order, low, btype='low')
+    total_rot = filtfilt(b_noise, a_noise, median_filtered)
+    
+    return total_rot
+
+'''
+plotting function 
+'''
 def plot_interactive_windows(df: pd.DataFrame):
     # Setup the figure and subplots (Accel and Gyro)
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
@@ -156,12 +238,47 @@ def plot_interactive_windows(df: pd.DataFrame):
             df_output_rot_z.loc[len(df_output_rot_z)] = cur_rot_z
 
         '''
+        final dataset file tree:
+        
         final_dataset/ 
-            train /
+            train/
                 time_series/
+                    cycling_1/
+                        cycling_1_acc_x.csv 
+                        cycling_1_acc_y.csv
+                        cycling_1_acc_z.csv  
+                        cycling_1_rot_x.csv 
+                        cycling_1_rot_y.csv
+                        cycling_1_rot_z.csv  
+                    running_1/
+                        running_1_acc_x.csv 
+                        running_1_acc_y.csv
+                        running_1_acc_z.csv
+                        running_1_rot_x.csv 
+                        running_1_rot_y.csv
+                        running_1_rot_z.csv  
+                    {experiment_type}_{experiment_index}/
+                        {experiment_type}_{experiment_index}_acc_x.csv 
+                        {experiment_type}_{experiment_index}_acc_y.csv
+                        {experiment_type}_{experiment_index}_acc_z.csv
+                        {experiment_type}_{experiment_index}_rot_x.csv 
+                        {experiment_type}_{experiment_index}_rot_y.csv
+                        {experiment_type}_{experiment_index}_rot_z.csv  
+                    .
+                    .
+                    .
                 features/
-                
+                    cycling_1/
+                        cycling_1_features.csv 
+                    running_1/
+                        running_1_features.csv 
+                    {experiment_type}_{experiment_index}/
+                        experiment_type}_{experiment_index}_features.csv
+                    .
+                    .
+                    .
             test/
+                **identical to train/**
             activity_labels.csv
         '''
         
