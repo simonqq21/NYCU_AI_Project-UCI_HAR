@@ -6,97 +6,6 @@ Docstring for generate_features_train_test_split
     - save both time series windows and extracted features 
     
 '''
-
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from pathlib import Path 
-import os 
-import re 
-
-window_size = 128 
-selected_windows_dir = Path("./selected_windows")
-
-# eg. cycling_1, running_2, jumprope_1, ...
-pattern = r'.+_\d+'
-folders = [f.name for f in selected_windows_dir.iterdir() if f.is_dir()]
-selected_activities = sorted([f for f in folders if re.search(pattern, f)])
-selected_activities = [Path(selected_windows_dir, folder) for folder in selected_activities]
-
-# load activity labels 
-activity_labels = pd.read_csv(Path("./final_dataset/activity_labels.csv"))
-print(activity_labels.head())
-
-# seven parallel dataframes:
-# six for the 128 signal window
-# one for the labels 
-df_X_acc_x = pd.DataFrame(columns = range(window_size)) 
-df_X_acc_y = pd.DataFrame(columns = range(window_size)) 
-df_X_acc_z = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_x = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_y = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_z = pd.DataFrame(columns = range(window_size)) 
-df_y = pd.DataFrame(columns = ["label"])
-    
-# for each activity 
-for selected_activity_dir in selected_activities:
-    # Split by the character _ 
-    activity_name = str(selected_activity_dir.name)
-    activity_type = re.split(r'[_]', activity_name)[0].upper() 
-    print(activity_type)
-    # get row in df that matches activity type 
-    activity_label = activity_labels[activity_labels["activity"] == activity_type]
-    # get numeric label corresponding to the activity type 
-    activity_label = activity_label["num"].values[0]
-    print(activity_label)
-
-    # load all six axis RAW signals
-    # the iloc[:,1:] drops the initial time index column
-    acc_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_x.csv")).iloc[:,1:]
-    acc_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_y.csv")).iloc[:,1:]
-    acc_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_z.csv")).iloc[:,1:]
-    rot_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_x.csv")).iloc[:,1:]
-    rot_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_y.csv")).iloc[:,1:]
-    rot_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_z.csv")).iloc[:,1:]
-
-    # get number of windows recorded per activity 
-    num_windows = acc_x_df.shape[0]
-    
-    # make the columns equal so that they can be concatenated.
-    df_X_acc_x.columns = acc_x_df.columns 
-    df_X_acc_y.columns = acc_y_df.columns 
-    df_X_acc_z.columns = acc_z_df.columns 
-    df_X_rot_x.columns = rot_x_df.columns 
-    df_X_rot_y.columns = rot_y_df.columns 
-    df_X_rot_z.columns = rot_z_df.columns 
-
-    # concatenate X dataframes
-    # # pd.DataFrame(acc_x_df.to_numpy())
-    df_X_acc_x = pd.concat((df_X_acc_x, acc_x_df))
-    df_X_acc_y = pd.concat((df_X_acc_y, acc_y_df))
-    df_X_acc_z = pd.concat((df_X_acc_z, acc_z_df))
-    df_X_rot_x = pd.concat((df_X_rot_x, rot_x_df))
-    df_X_rot_y = pd.concat((df_X_rot_y, rot_y_df))
-    df_X_rot_z = pd.concat((df_X_rot_z, rot_z_df))
-    
-    # concatenate y labels 
-    new_y_labels = pd.DataFrame([activity_label] * num_windows, columns=df_y.columns)
-    df_y = pd.concat([df_y, new_y_labels])
-
-# testing 
-print(f"{df_X_acc_x.shape}")
-print(f"{df_X_acc_y.shape}")
-print(f"{df_X_acc_z.shape}")
-print(f"{df_X_rot_x.shape}")
-print(f"{df_X_rot_y.shape}")
-print(f"{df_X_rot_z.shape}")
-print(f"{df_y.shape}")
-
-
-# ****************************************************************
-
-from scipy.signal import medfilt, butter, filtfilt
-
 '''
 final dataset file tree:
 
@@ -205,116 +114,94 @@ mean frequency
 gravity angles 
 '''  
 
-def create_lowpass_filter(cutoff, fs=50, order=3):
-    # 2. Apply Low-Pass Butterworth Filter
-    # 20 Hz default cutoff frequency
-    nyq = 0.5 * fs
-    low = cutoff / nyq
-    b, a = butter(order, low, btype='low')
-    return b,a
-'''
-denoise and filter accelerometer signals 
-median filter for initial filtering
-20 Hz lowpass butterworth filter for high frequency noise
-0.3 Hz lowpass butterworth filter for gravity
-'''
-# accelerometer signal denoises and filters out 
-# 
-def denoise_accl_signal(data: pd.DataFrame, fs=50, order=3) -> pd.DataFrame: 
-    # convert to np.float64
-    data = data.to_numpy().astype(np.float64)
-    
-    nyq = 0.5 * fs
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from pathlib import Path 
+import os 
+import re 
 
-    # 1. Apply Median Filter (kernel size 3 or 5 is standard)
-    median_filtered = medfilt(data, kernel_size=3, )
+window_size = 128 
+selected_windows_dir = Path("./selected_windows")
 
-    # 2. Apply Low-Pass Butterworth Filter
-    # 20 Hz default cutoff frequency
-    cutoff = 20
-    b_noise, a_noise = create_lowpass_filter(cutoff, fs, 3)
-    # axis = 1 - filter along rows
-    total_acc = filtfilt(b_noise, a_noise, median_filtered, axis=1)
-    
-    # 3. Apply Low-Pass Butterworth Filter
-    # 0.3 Hz default cutoff frequency
-    cutoff=0.3
-    b_grav, a_grav = create_lowpass_filter(cutoff, fs, 3)
-    # axis = 1 - filter along rows
-    gravity = filtfilt(b_grav, a_grav, total_acc, axis=1)
-
-    # subtract body acceleration from gravity to get total 
-    # body_acc = total_acc - gravity
-
-    # return body acceleration and gravity acceleration
-    # convert back to DataFrame
-    df_total_acc = pd.DataFrame(total_acc)
-    df_gravity = pd.DataFrame(gravity)
-    
-    return df_total_acc, df_gravity 
-
-'''
-denoise and filter gyroscope signals 
-median filter for initial filtering
-20 Hz lowpass butterworth filter for high frequency noise
-'''
-def denoise_gyro_signal(data, fs=50, order=3):
-    # convert to np.float64
-    data = data.to_numpy().astype(np.float64)
-    
-    nyq = 0.5 * fs
-
-    # 1. Apply Median Filter (kernel size 3 or 5 is standard)
-    median_filtered = medfilt(data, kernel_size=3)
-
-    # 2. Apply Low-Pass Butterworth Filter
-    # 20 Hz default cutoff frequency
-    cutoff = 20
-    b_noise, a_noise = create_lowpass_filter(cutoff, fs, 3)
-    # axis = 1 - filter along rows
-    total_rot = filtfilt(b_noise, a_noise, median_filtered, axis=1)
-
-    # convert back to DataFrame 
-    df_total_rot = pd.DataFrame(total_rot)
-    
-    return df_total_rot 
+# eg. cycling_1, running_2, jumprope_1, ...
+pattern = r'.+_\d+'
+folders = [f.name for f in selected_windows_dir.iterdir() if f.is_dir()]
+selected_activities = sorted([f for f in folders if re.search(pattern, f)])
+selected_activities = [Path(selected_windows_dir, folder) for folder in selected_activities]
 
 # ****************************************************************
-# final dataset dir 
-final_dataset_path = Path("./final_dataset/")
-train_dir = Path("train/")
-test_dir = Path("test/")
-time_series = Path("time_series/")
-features = Path("features")
-# final_dataset/{train_test}/{time_series_or_features}/{experiment_type}_{experiment_index}/{experiment_type}_{experiment_index}_acc_x.csv 
-
-# perform a train-test-split on the indices 
-indices = np.arange(len(df_y))
-
-# 2. Split the indices, NOT the data yet
-# Stratify=y_labels ensures each activity is represented 80/20
-idx_train, idx_test = train_test_split(
-    indices, 
-    test_size=0.2, 
-    stratify=df_y, 
-    random_state=42
-)
-
-# at this point the indices for train-test-split have been created. 
-print(idx_train, idx_test)
-
-# filter the data 
-df_acc_x_total, df_acc_x_gravity = denoise_accl_signal(df_X_acc_x)
-df_acc_y_total, df_acc_y_gravity = denoise_accl_signal(df_X_acc_y)
-df_acc_z_total, df_acc_z_gravity = denoise_accl_signal(df_X_acc_z)
-df_rot_x_total = denoise_gyro_signal(df_X_rot_x)
-df_rot_y_total = denoise_gyro_signal(df_X_rot_y)
-df_rot_z_total = denoise_gyro_signal(df_X_rot_z)
-
-# at this point the data has been filtered. 
+# load activity labels 
+activity_labels = pd.read_csv(Path("./final_dataset/activity_labels.csv"))
+print(activity_labels.head())
 
 # ****************************************************************
-# Train-Test-Split 
+# Load all windows into seven parallel dataframes
+# seven parallel dataframes:
+# six for the 128 signal window
+# one for the labels 
+df_X_acc_x = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_y = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_z = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_x = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_y = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_z = pd.DataFrame(columns = range(window_size)) 
+df_y = pd.DataFrame(columns = ["label"])
+    
+# for each activity 
+for selected_activity_dir in selected_activities:
+    # Split by the character _ 
+    activity_name = str(selected_activity_dir.name)
+    activity_type = re.split(r'[_]', activity_name)[0].upper() 
+    print(activity_type)
+    # get row in df that matches activity type 
+    activity_label = activity_labels[activity_labels["activity"] == activity_type]
+    # get numeric label corresponding to the activity type 
+    activity_label = activity_label["num"].values[0]
+    print(activity_label)
+
+    # load all six axis RAW signals
+    # the iloc[:,1:] drops the initial time index column
+    acc_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_x.csv")).iloc[:,1:]
+    acc_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_y.csv")).iloc[:,1:]
+    acc_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_z.csv")).iloc[:,1:]
+    rot_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_x.csv")).iloc[:,1:]
+    rot_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_y.csv")).iloc[:,1:]
+    rot_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_z.csv")).iloc[:,1:]
+
+    # get number of windows recorded per activity 
+    num_windows = acc_x_df.shape[0]
+    
+    # make the columns equal so that they can be concatenated.
+    df_X_acc_x.columns = acc_x_df.columns 
+    df_X_acc_y.columns = acc_y_df.columns 
+    df_X_acc_z.columns = acc_z_df.columns 
+    df_X_rot_x.columns = rot_x_df.columns 
+    df_X_rot_y.columns = rot_y_df.columns 
+    df_X_rot_z.columns = rot_z_df.columns 
+
+    # concatenate X dataframes
+    # # pd.DataFrame(acc_x_df.to_numpy())
+    df_X_acc_x = pd.concat((df_X_acc_x, acc_x_df))
+    df_X_acc_y = pd.concat((df_X_acc_y, acc_y_df))
+    df_X_acc_z = pd.concat((df_X_acc_z, acc_z_df))
+    df_X_rot_x = pd.concat((df_X_rot_x, rot_x_df))
+    df_X_rot_y = pd.concat((df_X_rot_y, rot_y_df))
+    df_X_rot_z = pd.concat((df_X_rot_z, rot_z_df))
+    
+    # concatenate y labels 
+    new_y_labels = pd.DataFrame([activity_label] * num_windows, columns=df_y.columns)
+    df_y = pd.concat([df_y, new_y_labels])
+
+# testing 
+print(f"{df_X_acc_x.shape}")
+print(f"{df_X_acc_y.shape}")
+print(f"{df_X_acc_z.shape}")
+print(f"{df_X_rot_x.shape}")
+print(f"{df_X_rot_y.shape}")
+print(f"{df_X_rot_z.shape}")
+print(f"{df_y.shape}")
+
 
 
 
@@ -420,16 +307,26 @@ df_X_features["rot_x_total_energy"] = get_energy(df_rot_x_total)
 df_X_features["rot_y_total_energy"] = get_energy(df_rot_y_total)
 df_X_features["rot_z_total_energy"] = get_energy(df_rot_z_total)
 # # iqr
-
-# df_X_features["acc_x_total_"] = df_acc_x_total.max()
-# df_X_features["acc_y_total_"] = df_acc_y_total.
-# df_X_features["acc_z_total_"] = df_acc_z_total.
-# df_X_features["acc_x_gravity_"] = df_acc_x_gravity.
-# df_X_features["acc_y_gravity_"] = df_acc_y_gravity.
-# df_X_features["acc_z_gravity_"] = df_acc_z_gravity.
-# df_X_features["rot_x_total_"] = df_rot_x_total.
-# df_X_features["rot_y_total_"] = df_rot_y_total.
-# df_X_features["rot_z_total_"] = df_rot_z_total.
+def compute_iqr_vectorized(windowed_data):
+    """
+    Computes IQR for a 2D array of windows.
+    Input shape: (num_windows, 128)
+    Output shape: (num_windows,)
+    """
+    # Calculate Q1 (25th percentile) and Q3 (75th percentile) along the samples axis
+    q1 = np.percentile(windowed_data, 25, axis=1)
+    q3 = np.percentile(windowed_data, 75, axis=1)
+    
+    return q3 - q1
+df_X_features["acc_x_total_iqr"] = compute_iqr_vectorized(df_acc_x_total)
+df_X_features["acc_y_total_iqr"] = compute_iqr_vectorized(df_acc_y_total)
+df_X_features["acc_z_total_iqr"] = compute_iqr_vectorized(df_acc_z_total)
+df_X_features["acc_x_gravity_iqr"] = compute_iqr_vectorized(df_acc_x_gravity)
+df_X_features["acc_y_gravity_iqr"] = compute_iqr_vectorized(df_acc_y_gravity)
+df_X_features["acc_z_gravity_iqr"] = compute_iqr_vectorized(df_acc_z_gravity)
+df_X_features["rot_x_total_iqr"] = compute_iqr_vectorized(df_rot_x_total)
+df_X_features["rot_y_total_iqr"] = compute_iqr_vectorized(df_rot_y_total)
+df_X_features["rot_z_total_iqr"] = compute_iqr_vectorized(df_rot_z_total)
 # entropy 
 def compute_entropy(data):
     data = data.to_numpy()
@@ -514,7 +411,66 @@ df_X_features["acc_gravity_mean"] = (df_acc_x_gravity + df_acc_y_gravity + df_ac
 # df_X_features["rot_y_total_"] = df_rot_y_total.
 # df_X_features["rot_z_total_"] = df_rot_z_total.
 
+# ****************************************************************
+# Train-Test-Split 
+
+# perform a train-test-split on the indices 
+indices = np.arange(len(df_y))
+
+# 2. Split the indices, NOT the data yet
+# Stratify=y_labels ensures each activity is represented 80/20
+idx_train, idx_test = train_test_split(
+    indices, 
+    test_size=0.2, 
+    stratify=df_y, 
+    random_state=42
+)
+
+# at this point the indices for train-test-split have been created. 
+print(idx_train, idx_test)
+
+# ****************************************************************
+# split the time series signals 
+df_X_features_train = 
+df_X_features_test = 
+df_y_features_train = 
+df_y_features_test = 
+
+# ****************************************************************
+# split the signal features
+df_acc_x_total_
+# ****************************************************************
+# normalize the time series data for the CNN
+
+from sklearn.preprocessing import StandardScaler
+
+# 1. Flatten your 3D training data to 2D to fit the scaler
+# Shape: (N_train, 128, 12) -> (N_train * 128, 12)
+N, T, C = X_train.shape
+X_train_reshaped = X_train.reshape(-1, C)
+
+scaler = StandardScaler()
+X_train_normalized = scaler.fit_transform(X_train_reshaped)
+
+# 2. Reshape back to 3D
+X_train = X_train_normalized.reshape(N, T, C)
+
+# 3. Apply the SAME scaler to the Test set (DO NOT call fit_transform)
+N_t, T_t, C_t = X_test.shape
+X_test_reshaped = X_test.reshape(-1, C_t)
+X_test_normalized = scaler.transform(X_test_reshaped)
+X_test = X_test_normalized.reshape(N_t, T_t, C_t)
+
+
 pass
+# ****************************************************************
+# final dataset dir 
+final_dataset_path = Path("./final_dataset/")
+train_dir = Path("train/")
+test_dir = Path("test/")
+time_series = Path("time_series/")
+features = Path("features")
+# final_dataset/{train_test}/{time_series_or_features}/{experiment_type}_{experiment_index}/{experiment_type}_{experiment_index}_acc_x.csv 
 
 # df_X_features[""] = 
 
@@ -588,66 +544,13 @@ pass
 
 
 
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
-
-def build_har_model(input_shape, num_classes):
-    model = Sequential([
-        # First Convolutional Layer
-        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=input_shape),
-        MaxPooling1D(pool_size=2),
-        Dropout(0.5),
-        
-        # Second Convolutional Layer
-        Conv1D(filters=64, kernel_size=3, activation='relu'),
-        MaxPooling1D(pool_size=2),
-        
-        Flatten(),
-        Dense(100, activation='relu'),
-        Dense(num_classes, activation='softmax') # Softmax for multi-class
-    ])
-    
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    return model
-
-# Initialize (6 axes, 5 activities)
-model = build_har_model((128, 9), 5)
-model.summary()
 
 
 
 
 
 
-# import numpy as np
-# import pandas as pd
 
-def load_dataset_to_3d(file_prefix='signal_', axes=None):
-    if axes is None:
-        axes = ['acc_x', 'acc_y', 'acc_z', 'gyro_x', 'gyro_y', 'gyro_z']
-    
-    instance_list = []
-    
-    for axis in axes:
-        # Load the 128-column CSV (header=None since we saved without headers)
-        df = pd.read_csv(f'{file_prefix}{axis}.csv', header=None)
-        # Convert to numpy and add a "depth" dimension
-        # Shape change: (N, 128) -> (N, 128, 1)
-        instance_list.append(df.values[:, :, np.newaxis])
-    
-    # Stack along the last axis to get (N, 128, 6)
-    X = np.concatenate(instance_list, axis=-1)
-    
-    # Load labels
-    y = pd.read_csv('y_labels.csv', header=None).values
-    
-    return X, y
-
-# # Execute
-# X_train, y_train = load_dataset_to_3d()
-
-# print(f"X_train shape: {X_train.shape}") # Expected: (Samples, 128, 6)
-# print(f"y_train shape: {y_train.shape}") # Expected: (Samples, 1)
 
 
 
@@ -767,31 +670,31 @@ def load_dataset_to_3d(file_prefix='signal_', axes=None):
 
 
 
-import numpy as np
-import pandas as pd
+# import numpy as np
+# import pandas as pd
 
-def calculate_derivatives_and_mag(df):
-    """
-    Adds Jerk and Magnitude columns to your processed dataframe.
-    Assumes 50Hz (dt = 0.02s)
-    """
-    dt = 0.02
-    new_df = df.copy()
+# def calculate_derivatives_and_mag(df):
+#     """
+#     Adds Jerk and Magnitude columns to your processed dataframe.
+#     Assumes 50Hz (dt = 0.02s)
+#     """
+#     dt = 0.02
+#     new_df = df.copy()
     
-    # 1. Calculate Magnitudes
-    for prefix in ['body_acc', 'grav_acc', 'clean_gyro']:
-        cols = [f'{prefix}_x', f'{prefix}_y', f'{prefix}_z']
-        new_df[f'{prefix}_mag'] = np.sqrt((df[cols]**2).sum(axis=1))
+#     # 1. Calculate Magnitudes
+#     for prefix in ['body_acc', 'grav_acc', 'clean_gyro']:
+#         cols = [f'{prefix}_x', f'{prefix}_y', f'{prefix}_z']
+#         new_df[f'{prefix}_mag'] = np.sqrt((df[cols]**2).sum(axis=1))
     
-    # 2. Calculate Jerk (Derivative of Body Acc and Gyro)
-    # We use np.gradient for a more stable central difference
-    for axis in ['x', 'y', 'z', 'mag']:
-        # Body Acc Jerk
-        new_df[f'body_acc_jerk_{axis}'] = np.gradient(new_df[f'body_acc_{axis}'], dt)
-        # Gyro Jerk (Angular Acceleration)
-        new_df[f'gyro_jerk_{axis}'] = np.gradient(new_df[f'clean_gyro_{axis}'], dt)
+#     # 2. Calculate Jerk (Derivative of Body Acc and Gyro)
+#     # We use np.gradient for a more stable central difference
+#     for axis in ['x', 'y', 'z', 'mag']:
+#         # Body Acc Jerk
+#         new_df[f'body_acc_jerk_{axis}'] = np.gradient(new_df[f'body_acc_{axis}'], dt)
+#         # Gyro Jerk (Angular Acceleration)
+#         new_df[f'gyro_jerk_{axis}'] = np.gradient(new_df[f'clean_gyro_{axis}'], dt)
         
-    return new_df
+#     return new_df
 
 # # Usage:
 # # df_augmented = calculate_derivatives_and_mag(df_final)
@@ -820,24 +723,7 @@ def calculate_derivatives_and_mag(df):
 
 
 
-# from sklearn.preprocessing import StandardScaler
 
-# # 1. Flatten your 3D training data to 2D to fit the scaler
-# # Shape: (N_train, 128, 12) -> (N_train * 128, 12)
-# N, T, C = X_train.shape
-# X_train_reshaped = X_train.reshape(-1, C)
-
-# scaler = StandardScaler()
-# X_train_normalized = scaler.fit_transform(X_train_reshaped)
-
-# # 2. Reshape back to 3D
-# X_train = X_train_normalized.reshape(N, T, C)
-
-# # 3. Apply the SAME scaler to the Test set (DO NOT call fit_transform)
-# N_t, T_t, C_t = X_test.shape
-# X_test_reshaped = X_test.reshape(-1, C_t)
-# X_test_normalized = scaler.transform(X_test_reshaped)
-# X_test = X_test_normalized.reshape(N_t, T_t, C_t)
 
 
 
@@ -866,41 +752,6 @@ def calculate_derivatives_and_mag(df):
 
 
 
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
-
-def build_cnn_model(input_shape, num_classes):
-    model = Sequential([
-        # 1. First Convolutional Block
-        # Filters=32, Kernel=3 is standard for 50Hz signals
-        Conv1D(filters=32, kernel_size=3, activation='relu', input_shape=input_shape),
-        MaxPooling1D(pool_size=2),
-        
-        # 2. Second Convolutional Block
-        Conv1D(filters=64, kernel_size=3, activation='relu'),
-        MaxPooling1D(pool_size=2),
-        
-        # 3. Flatten and Regularization
-        Flatten(),
-        Dropout(0.5), # Crucial because your dataset is small
-        
-        # 4. Fully Connected Output
-        Dense(64, activation='relu'),
-        Dense(num_classes, activation='softmax') # Softmax for probability distribution
-    ])
-    
-    model.compile(
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy', # Handles your 0-4 integer labels
-        metrics=['accuracy']
-    )
-    
-    return model
-
-# # Your input shape: (128 time steps, 12 channels)
-# model = build_cnn_model((128, 12), 5)
-# model.summary()
 
 
 
@@ -917,79 +768,12 @@ def build_cnn_model(input_shape, num_classes):
 
 
 
-# from sklearn.model_selection import StratifiedKFold
-# from sklearn.preprocessing import StandardScaler
-# import numpy as np
-
-# # 1. Initialize K-Fold (5 folds means 80/20 split each time)
-# skf = StratifiedKFold(n_sequences=5, shuffle=True, random_state=42)
-
-# fold_accuracies = []
-
-# # 2. Start the Cross-Validation Loop
-# # We use 'y' to ensure each activity is represented equally in every fold
-# for fold, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(y)), y)):
-#     print(f"--- Training Fold {fold+1} ---")
-    
-#     # A. Split the data using the indices
-#     X_train, X_test = X_raw[train_idx], X_raw[test_idx]
-#     y_train, y_test = y[train_idx], y[test_idx]
-    
-#     # B. Normalize (CRITICAL: Fit on Train, Transform Test to avoid leakage)
-#     N, T, C = X_train.shape
-#     scaler = StandardScaler()
-#     X_train_reshaped = scaler.fit_transform(X_train.reshape(-1, C)).reshape(N, T, C)
-    
-#     N_t, T_t, C_t = X_test.shape
-#     X_test_reshaped = scaler.transform(X_test.reshape(-1, C_t)).reshape(N_t, T_t, C_t)
-    
-#     # C. Build and Train your 1D-CNN
-#     model = build_cnn_model((128, 12), 5)
-#     model.fit(X_train_reshaped, y_train, epochs=30, batch_size=16, verbose=0)
-    
-#     # D. Evaluate
-#     loss, acc = model.evaluate(X_test_reshaped, y_test, verbose=0)
-#     fold_accuracies.append(acc)
-#     print(f"Fold {fold+1} Accuracy: {acc:.4f}")
-
-# # 3. Final Result
-# print(f"\nFinal Cross-Validation Accuracy: {np.mean(fold_accuracies):.4f} +/- {np.std(fold_accuracies):.4f}")
 
 
 
 
-# import pandas as pd
-# from sklearn.ensemble import RandomForestClassifier
-# from sklearn.metrics import classification_report, accuracy_score
 
-# # Load feature names
-# features = pd.read_csv('UCI HAR Dataset/features.txt', sep='\s+', header=None, names=['ID', 'Name'])
 
-# # Load Training Data
-# X_train = pd.read_csv('UCI HAR Dataset/train/X_train.txt', sep='\s+', header=None)
-# y_train = pd.read_csv('UCI HAR Dataset/train/y_train.txt', sep='\s+', header=None)
-
-# # Load Test Data
-# X_test = pd.read_csv('UCI HAR Dataset/test/X_test.txt', sep='\s+', header=None)
-# y_test = pd.read_csv('UCI HAR Dataset/test/y_test.txt', sep='\s+', header=None)
-
-# # Assign feature names to columns (optional but helpful for feature importance)
-# X_train.columns = features['Name']
-# X_test.columns = features['Name']
-
-# # Initialize the classifier
-# # n_estimators=100 is a good start; random_state ensures reproducibility
-# rf_model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-
-# # Train the model
-# rf_model.fit(X_train, y_train.values.ravel())
-
-# # Make predictions
-# y_pred = rf_model.predict(X_test)
-
-# # Check results
-# print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-# print(classification_report(y_test, y_pred))
 
 
 
