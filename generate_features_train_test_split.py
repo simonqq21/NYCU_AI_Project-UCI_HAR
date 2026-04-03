@@ -13,41 +13,33 @@ final_dataset/
     train/
         time_series/
             cycling_1/
-                cycling_1_acc_x.csv 
-                cycling_1_acc_y.csv
-                cycling_1_acc_z.csv  
-                cycling_1_rot_x.csv 
-                cycling_1_rot_y.csv
-                cycling_1_rot_z.csv  
-            running_1/
-                running_1_acc_x.csv 
-                running_1_acc_y.csv
-                running_1_acc_z.csv
-                running_1_rot_x.csv 
-                running_1_rot_y.csv
-                running_1_rot_z.csv  
-            {experiment_type}_{experiment_index}/
-                {experiment_type}_{experiment_index}_acc_x.csv 
-                {experiment_type}_{experiment_index}_acc_y.csv
-                {experiment_type}_{experiment_index}_acc_z.csv
-                {experiment_type}_{experiment_index}_rot_x.csv 
-                {experiment_type}_{experiment_index}_rot_y.csv
-                {experiment_type}_{experiment_index}_rot_z.csv  
-            .
-            .
-            .
+                X_acc_x_total_train.csv 
+                X_acc_y_total_train.csv
+                X_acc_z_total_train.csv  
+                X_acc_x_gravity_train.csv 
+                X_acc_y_gravity_train.csv 
+                X_acc_z_gravity_train.csv 
+                X_rot_x_total_train.csv 
+                X_rot_y_total_train.csv
+                X_rot_z_total_train.csv  
         features/
-            cycling_1/
-                cycling_1_features.csv 
-            running_1/
-                running_1_features.csv 
-            {experiment_type}_{experiment_index}/
-                experiment_type}_{experiment_index}_features.csv
-            .
-            .
-            .
+            X_train.csv
+        y_train.csv
     test/
-        **identical to train/**
+        time_series/
+            cycling_1/
+                X_acc_x_total_test.csv 
+                X_acc_y_total_test.csv
+                X_acc_z_total_test.csv  
+                X_acc_x_gravity_test.csv 
+                X_acc_y_gravity_test.csv 
+                X_acc_z_gravity_test.csv 
+                X_rot_x_total_test.csv 
+                X_rot_y_total_test.csv
+                X_rot_z_total_test.csv  
+        features/
+            X_test.csv
+        y_test.csv
     activity_labels.csv
 
 algorithm:
@@ -126,9 +118,6 @@ selected_windows_dir = Path("./selected_windows")
 
 # eg. cycling_1, running_2, jumprope_1, ...
 pattern = r'.+_\d+'
-folders = [f.name for f in selected_windows_dir.iterdir() if f.is_dir()]
-selected_activities = sorted([f for f in folders if re.search(pattern, f)])
-selected_activities = [Path(selected_windows_dir, folder) for folder in selected_activities]
 
 # ****************************************************************
 # load activity labels 
@@ -136,73 +125,153 @@ activity_labels = pd.read_csv(Path("./final_dataset/activity_labels.csv"))
 print(activity_labels.head())
 
 # ****************************************************************
+# OUTPUT files 
 # Load all windows into seven parallel dataframes
-# seven parallel dataframes:
-# six for the 128 signal window
-# one for the labels 
-df_X_acc_x = pd.DataFrame(columns = range(window_size)) 
-df_X_acc_y = pd.DataFrame(columns = range(window_size)) 
-df_X_acc_z = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_x = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_y = pd.DataFrame(columns = range(window_size)) 
-df_X_rot_z = pd.DataFrame(columns = range(window_size)) 
-df_y = pd.DataFrame(columns = ["label"])
-    
-# for each activity 
+# 22 dataframes
+# 9 dfs for X train and test time series
+# 1 df each for X train and test features 
+# 1 df each for y train and test labels 
+df_X_acc_x_total_train = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_y_total_train = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_z_total_train = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_x_gravity_train = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_y_gravity_train = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_z_gravity_train = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_x_total_train = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_y_total_train = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_z_total_train = pd.DataFrame(columns = range(window_size)) 
+
+df_X_features_train = pd.DataFrame()
+
+df_y_train = pd.DataFrame(columns = ["label"])
+
+
+df_X_acc_x_total_test = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_y_total_test = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_z_total_test = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_x_gravity_test = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_y_gravity_test = pd.DataFrame(columns = range(window_size)) 
+df_X_acc_z_gravity_test = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_x_total_test = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_y_total_test = pd.DataFrame(columns = range(window_size)) 
+df_X_rot_z_total_test = pd.DataFrame(columns = range(window_size)) 
+
+df_X_features_test = pd.DataFrame()
+
+df_y_test = pd.DataFrame(columns = ["label"])
+
+# ****************************************************************
+folders = [f.name for f in selected_windows_dir.iterdir() if f.is_dir()]
+selected_activities = sorted([f for f in folders if re.search(pattern, f)])
+selected_activities = [Path(selected_windows_dir, folder) for folder in selected_activities]
+# for each activity dir
 for selected_activity_dir in selected_activities:
     # Split by the character _ 
     activity_name = str(selected_activity_dir.name)
-    activity_type = re.split(r'[_]', activity_name)[0].upper() 
-    print(activity_type)
+    
+    split_activity_name = re.split(r'[_]', activity_name)
+    activity_name_index = f"{split_activity_name[0]}_{split_activity_name[1]}"
+    activity_type = split_activity_name[0].upper() 
+    activity_train_test = split_activity_name[2]
+    print(activity_type, activity_train_test)
     # get row in df that matches activity type 
     activity_label = activity_labels[activity_labels["activity"] == activity_type]
     # get numeric label corresponding to the activity type 
     activity_label = activity_label["num"].values[0]
     print(activity_label)
 
-    # load all six axis RAW signals
+    # load all nine axis RAW signals
     # the iloc[:,1:] drops the initial time index column
-    acc_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_x.csv")).iloc[:,1:]
-    acc_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_y.csv")).iloc[:,1:]
-    acc_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_acc_z.csv")).iloc[:,1:]
-    rot_x_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_x.csv")).iloc[:,1:]
-    rot_y_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_y.csv")).iloc[:,1:]
-    rot_z_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name}_rot_z.csv")).iloc[:,1:]
+    try:    
+        acc_x_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_x_total_{activity_train_test}.csv")).iloc[:,1:]
+        acc_y_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_y_total_{activity_train_test}.csv")).iloc[:,1:]
+        acc_z_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_z_total_{activity_train_test}.csv")).iloc[:,1:]
+        acc_x_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_x_gravity_{activity_train_test}.csv")).iloc[:,1:]
+        acc_y_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_y_gravity_{activity_train_test}.csv")).iloc[:,1:]
+        acc_z_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_z_gravity_{activity_train_test}.csv")).iloc[:,1:]
+        rot_x_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_x_total_{activity_train_test}.csv")).iloc[:,1:]
+        rot_y_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_y_total_{activity_train_test}.csv")).iloc[:,1:]
+        rot_z_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_z_total_{activity_train_test}.csv")).iloc[:,1:]
 
-    # get number of windows recorded per activity 
-    num_windows = acc_x_df.shape[0]
-    
-    # make the columns equal so that they can be concatenated.
-    df_X_acc_x.columns = acc_x_df.columns 
-    df_X_acc_y.columns = acc_y_df.columns 
-    df_X_acc_z.columns = acc_z_df.columns 
-    df_X_rot_x.columns = rot_x_df.columns 
-    df_X_rot_y.columns = rot_y_df.columns 
-    df_X_rot_z.columns = rot_z_df.columns 
-
-    # concatenate X dataframes
-    # # pd.DataFrame(acc_x_df.to_numpy())
-    df_X_acc_x = pd.concat((df_X_acc_x, acc_x_df))
-    df_X_acc_y = pd.concat((df_X_acc_y, acc_y_df))
-    df_X_acc_z = pd.concat((df_X_acc_z, acc_z_df))
-    df_X_rot_x = pd.concat((df_X_rot_x, rot_x_df))
-    df_X_rot_y = pd.concat((df_X_rot_y, rot_y_df))
-    df_X_rot_z = pd.concat((df_X_rot_z, rot_z_df))
-    
-    # concatenate y labels 
-    new_y_labels = pd.DataFrame([activity_label] * num_windows, columns=df_y.columns)
-    df_y = pd.concat([df_y, new_y_labels])
+        # get number of windows recorded per activity 
+        num_windows = acc_x_total_df.shape[0]
+        # concatenate X dataframes
+        if activity_train_test == "test":
+            # make the columns equal so that they can be concatenated.
+            df_X_acc_x_total_train.columns = acc_x_total_df.columns 
+            df_X_acc_y_total_train.columns = acc_y_total_df.columns 
+            df_X_acc_z_total_train.columns = acc_z_total_df.columns 
+            df_X_acc_x_gravity_train.columns = acc_x_total_df.columns 
+            df_X_acc_y_gravity_train.columns = acc_y_total_df.columns 
+            df_X_acc_z_gravity_train.columns = acc_z_total_df.columns 
+            df_X_rot_x_total_train.columns = rot_x_total_df.columns 
+            df_X_rot_y_total_train.columns = rot_y_total_df.columns 
+            df_X_rot_z_total_train.columns = rot_z_total_df.columns 
+        
+            df_X_acc_x_total_train = pd.concat((df_X_acc_x_total_train, acc_x_total_df))
+            df_X_acc_y_total_train = pd.concat((df_X_acc_y_total_train, acc_y_total_df))
+            df_X_acc_z_total_train = pd.concat((df_X_acc_z_total_train, acc_z_total_df))
+            df_X_acc_x_gravity_train = pd.concat((df_X_acc_x_gravity_train, acc_x_total_df))
+            df_X_acc_y_gravity_train = pd.concat((df_X_acc_y_gravity_train, acc_y_total_df))
+            df_X_acc_z_gravity_train = pd.concat((df_X_acc_z_gravity_train, acc_z_total_df))
+            df_X_rot_x_total_train = pd.concat((df_X_rot_x_total_train, rot_x_total_df))
+            df_X_rot_y_total_train = pd.concat((df_X_rot_y_total_train, rot_y_total_df))
+            df_X_rot_z_total_train = pd.concat((df_X_rot_z_total_train, rot_z_total_df))
+            
+            # concatenate y labels 
+            new_y_labels = pd.DataFrame([activity_label] * num_windows, columns=df_y_train.columns)
+            df_y_train = pd.concat([df_y_train, new_y_labels])
+        else:
+            # make the columns equal so that they can be concatenated.
+            df_X_acc_x_total_test.columns = acc_x_total_df.columns 
+            df_X_acc_y_total_test.columns = acc_y_total_df.columns 
+            df_X_acc_z_total_test.columns = acc_z_total_df.columns 
+            df_X_acc_x_gravity_test.columns = acc_x_total_df.columns 
+            df_X_acc_y_gravity_test.columns = acc_y_total_df.columns 
+            df_X_acc_z_gravity_test.columns = acc_z_total_df.columns 
+            df_X_rot_x_total_test.columns = rot_x_total_df.columns 
+            df_X_rot_y_total_test.columns = rot_y_total_df.columns 
+            df_X_rot_z_total_test.columns = rot_z_total_df.columns 
+        
+            df_X_acc_x_total_test = pd.concat((df_X_acc_x_total_test, acc_x_total_df))
+            df_X_acc_y_total_test = pd.concat((df_X_acc_y_total_test, acc_y_total_df))
+            df_X_acc_z_total_test = pd.concat((df_X_acc_z_total_test, acc_z_total_df))
+            df_X_acc_x_gravity_test = pd.concat((df_X_acc_x_gravity_test, acc_x_total_df))
+            df_X_acc_y_gravity_test = pd.concat((df_X_acc_y_gravity_test, acc_y_total_df))
+            df_X_acc_z_gravity_test = pd.concat((df_X_acc_z_gravity_test, acc_z_total_df))
+            df_X_rot_x_total_test = pd.concat((df_X_rot_x_total_test, rot_x_total_df))
+            df_X_rot_y_total_test = pd.concat((df_X_rot_y_total_test, rot_y_total_df))
+            df_X_rot_z_total_test = pd.concat((df_X_rot_z_total_test, rot_z_total_df))
+            
+            # concatenate y labels 
+            new_y_labels = pd.DataFrame([activity_label] * num_windows, columns=df_y_test.columns)
+            df_y_test = pd.concat([df_y_test, new_y_labels])
+        
+    except FileNotFoundError:
+        print("empty folder")
 
 # testing 
-print(f"{df_X_acc_x.shape}")
-print(f"{df_X_acc_y.shape}")
-print(f"{df_X_acc_z.shape}")
-print(f"{df_X_rot_x.shape}")
-print(f"{df_X_rot_y.shape}")
-print(f"{df_X_rot_z.shape}")
-print(f"{df_y.shape}")
+print(f"{df_X_acc_x_total_train.shape}")
+print(f"{df_X_acc_y_total_train.shape}")
+print(f"{df_X_acc_z_total_train.shape}")
+print(f"{df_X_acc_x_gravity_train.shape}")
+print(f"{df_X_acc_y_gravity_train.shape}")
+print(f"{df_X_acc_z_gravity_train.shape}")
+print(f"{df_X_rot_x_total_train.shape}")
+print(f"{df_X_rot_y_total_train.shape}")
+print(f"{df_X_rot_z_total_train.shape}")
+print(f"{df_y_train.shape}")
 
-
+print(f"{df_X_acc_x_total_test.shape}")
+print(f"{df_X_acc_y_total_test.shape}")
+print(f"{df_X_acc_z_total_test.shape}")
+print(f"{df_X_acc_x_gravity_test.shape}")
+print(f"{df_X_acc_y_gravity_test.shape}")
+print(f"{df_X_acc_z_gravity_test.shape}")
+print(f"{df_X_rot_x_total_test.shape}")
+print(f"{df_X_rot_y_total_test.shape}")
+print(f"{df_X_rot_z_total_test.shape}")
+print(f"{df_y_test.shape}")
 
 
 # ****************************************************************
@@ -220,7 +289,6 @@ import numpy as np
 from scipy.fftpack import fft
 from scipy.stats import entropy
 
-df_X_features = pd.DataFrame()
 
 # mean 
 df_X_features["acc_x_total_mean"] = df_acc_x_total.mean(axis=1)
@@ -411,34 +479,34 @@ df_X_features["acc_gravity_mean"] = (df_acc_x_gravity + df_acc_y_gravity + df_ac
 # df_X_features["rot_y_total_"] = df_rot_y_total.
 # df_X_features["rot_z_total_"] = df_rot_z_total.
 
-# ****************************************************************
-# Train-Test-Split 
+# # ****************************************************************
+# # Train-Test-Split 
 
-# perform a train-test-split on the indices 
-indices = np.arange(len(df_y))
+# # perform a train-test-split on the indices 
+# indices = np.arange(len(df_y))
 
-# 2. Split the indices, NOT the data yet
-# Stratify=y_labels ensures each activity is represented 80/20
-idx_train, idx_test = train_test_split(
-    indices, 
-    test_size=0.2, 
-    stratify=df_y, 
-    random_state=42
-)
+# # 2. Split the indices, NOT the data yet
+# # Stratify=y_labels ensures each activity is represented 80/20
+# idx_train, idx_test = train_test_split(
+#     indices, 
+#     test_size=0.2, 
+#     stratify=df_y, 
+#     random_state=42
+# )
 
 # at this point the indices for train-test-split have been created. 
 print(idx_train, idx_test)
 
-# ****************************************************************
-# split the time series signals 
-df_X_features_train = 
-df_X_features_test = 
-df_y_features_train = 
-df_y_features_test = 
+# # ****************************************************************
+# # split the time series signals 
+# df_X_features_train = 
+# df_X_features_test = 
+# df_y_features_train = 
+# df_y_features_test = 
 
-# ****************************************************************
-# split the signal features
-df_acc_x_total_
+# # ****************************************************************
+# # split the signal features
+# df_acc_x_total_
 # ****************************************************************
 # normalize the time series data for the CNN
 
