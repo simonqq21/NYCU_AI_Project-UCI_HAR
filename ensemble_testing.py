@@ -7,6 +7,82 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
+import joblib
+from pathlib import Path
+
+# ****************************************************************
+# load training files, testing files, and scalers. 
+
+# Base Paths
+base_path = Path("./final_dataset/")
+train_path = base_path / "train"
+test_path = base_path / "test"
+
+# Define the 9 sensor components (axes)
+axes = [
+    "acc_x_total", "acc_y_total", "acc_z_total",
+    "acc_x_gravity", "acc_y_gravity", "acc_z_gravity",
+    "rot_x_total", "rot_y_total", "rot_z_total"
+]
+
+def get_paths(split):
+    """
+    Generates paths for a specific split ('train' or 'test').
+    Returns a dictionary of time_series paths and the feature/label paths.
+    """
+    split_dir = base_path / split
+    ts_dir = split_dir / "time_series"
+    
+    # 1. Map the 9 Time Series files
+    ts_paths = {
+        axis: ts_dir / f"X_{axis}_{split}.csv" for axis in axes
+    }
+    
+    # 2. Map Features and Labels
+    feature_path = split_dir / "features" / f"X_{split}.csv"
+    label_path = split_dir / f"y_{split}.csv"
+    
+    return ts_paths, feature_path, label_path
+
+# Generate for Train
+train_ts_paths, x_train_features_path, y_train_path = get_paths("train")
+
+# Generate for Test
+test_ts_paths, x_test_features_path, y_test_path = get_paths("test")
+
+# Activity Labels (Root level)
+activity_labels_path = base_path / "activity_labels.csv"
+
+# Scaler path 
+scalers_path = base_path / "scalers" / "9_axis_scalers.pkl"
+
+time_series_train = {}
+time_series_test = {}
+df_X_features_train = pd.DataFrame() 
+df_X_features_test = pd.DataFrame()
+
+# Load Train Time Series
+for axis_name, path in train_ts_paths.items():
+    time_series_train[axis_name].from_csv(path, index=False)
+
+# Load Test Time Series (assuming you have a similar test_timeseries_dict)
+for axis_name, path in test_ts_paths.items():
+    time_series_test[axis_name].to_csv(path, index=False)
+
+# Load Hand-crafted Features
+df_X_features_train = pd.read_csv(x_train_features_path, index=False)
+df_X_features_test = pd.read_csv(x_test_features_path, index=False)
+
+# Load Labels
+df_y_train = pd.read_csv(y_train_path, index=False)
+df_y_test = pd.read_csv(y_test_path, index=False)
+
+# Load back the registry
+loaded_scalers = joblib.load(scalers_path)
+
+# Example: Accessing the X-axis Accelerometer mean
+print(f"Mean for Acc X: {loaded_scalers['acc_x_total'].mean_}")
+
 
 
 def build_har_model(input_shape, num_classes):
@@ -32,33 +108,33 @@ def build_har_model(input_shape, num_classes):
 model = build_har_model((128, 9), 5)
 model.summary()
 
-def build_cnn_model(input_shape, num_classes):
-    model = Sequential([
-        # 1. First Convolutional Block
-        # Filters=32, Kernel=3 is standard for 50Hz signals
-        Conv1D(filters=32, kernel_size=3, activation='relu', input_shape=input_shape),
-        MaxPooling1D(pool_size=2),
+# def build_cnn_model(input_shape, num_classes):
+#     model = Sequential([
+#         # 1. First Convolutional Block
+#         # Filters=32, Kernel=3 is standard for 50Hz signals
+#         Conv1D(filters=32, kernel_size=3, activation='relu', input_shape=input_shape),
+#         MaxPooling1D(pool_size=2),
         
-        # 2. Second Convolutional Block
-        Conv1D(filters=64, kernel_size=3, activation='relu'),
-        MaxPooling1D(pool_size=2),
+#         # 2. Second Convolutional Block
+#         Conv1D(filters=64, kernel_size=3, activation='relu'),
+#         MaxPooling1D(pool_size=2),
         
-        # 3. Flatten and Regularization
-        Flatten(),
-        Dropout(0.5), # Crucial because your dataset is small
+#         # 3. Flatten and Regularization
+#         Flatten(),
+#         Dropout(0.5), # Crucial because your dataset is small
         
-        # 4. Fully Connected Output
-        Dense(64, activation='relu'),
-        Dense(num_classes, activation='softmax') # Softmax for probability distribution
-    ])
+#         # 4. Fully Connected Output
+#         Dense(64, activation='relu'),
+#         Dense(num_classes, activation='softmax') # Softmax for probability distribution
+#     ])
     
-    model.compile(
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy', # Handles your 0-4 integer labels
-        metrics=['accuracy']
-    )
+#     model.compile(
+#         optimizer='adam',
+#         loss='sparse_categorical_crossentropy', # Handles your 0-4 integer labels
+#         metrics=['accuracy']
+#     )
     
-    return model
+#     return model
 
 # # Your input shape: (128 time steps, 12 channels)
 # model = build_cnn_model((128, 12), 5)
