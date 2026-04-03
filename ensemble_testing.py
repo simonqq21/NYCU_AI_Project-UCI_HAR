@@ -1,7 +1,7 @@
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, LSTM
-import tensorflow as tf
-from sklearn.model_selection import StratifiedKFold
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, LSTM
+# import tensorflow as tf
+# from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 import numpy as np
@@ -13,6 +13,7 @@ from sklearn import svm
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 from pathlib import Path
+from sklearn.model_selection import GridSearchCV
 
 # ****************************************************************
 # load training files, testing files, and scalers. 
@@ -84,6 +85,10 @@ df_y_test = pd.read_csv(y_test_path)
 # Load back the registry
 scalers = joblib.load(scalers_path)
 
+# load activity names 
+activity_labels = pd.read_csv(activity_labels_path)
+activity_names = activity_labels["activity"].values
+
 # Example: Accessing the X-axis Accelerometer mean
 print(f"Mean for Acc X: {scalers['acc_x_total'].mean_}")
 
@@ -104,17 +109,20 @@ def load_har_dataset(path='./UCI_HAR2/'):
     # # Assign feature names to columns
     # X_train.columns = features['Name']
     # X_test.columns = features['Name']
+
+    global activity_names
     
     return (X_train, y_train), (X_test, y_test)
 
 (X_train, y_train), (X_test, y_test) = load_har_dataset()
 
-test_with_uci_har = True 
+test_with_uci_har = False 
 if test_with_uci_har:
     df_X_features_train = X_train
     df_y_train = y_train - 1
     df_X_features_test = X_test
     df_y_test = y_test - 1
+    activity_names = ['WALKING', 'WALKING_UPSTAIRS', 'WALKING_DOWNSTAIRS', 'SITTING', 'STANDING', 'LAYING']
     
 # ****************************************************************
 # load and scale data for CNN 
@@ -160,17 +168,41 @@ X_test_scaled = scaler.transform(df_X_features_test)
 # 2. Initialize PCA
 # Setting n_components to a float (0.95) tells PCA to select enough 
 # components to explain 95% of the variance in your data.
-pca = PCA(n_components=0.95)
+use_pca = True 
+if use_pca:
+    pca = PCA(n_components=0.95)
 
-# 3. Fit on Train, Transform both
-X_train_pca = pca.fit_transform(X_train_scaled)
-X_test_pca = pca.transform(X_test_scaled)
+    # 3. Fit on Train, Transform both
+    X_train_pca = pca.fit_transform(X_train_scaled)
+    X_test_pca = pca.transform(X_test_scaled)
 
-print(f"Original feature count: {df_X_features_train.shape[1]}")
-print(f"Reduced feature count: {pca.n_components_}")
+    print(f"Original feature count: {df_X_features_train.shape[1]}")
+    print(f"Reduced feature count: {pca.n_components_}")
 
-df_X_features_train = X_train_pca
-df_X_features_test = X_test_pca
+    df_X_features_train = X_train_pca
+    df_X_features_test = X_test_pca
+
+# classification report
+def save_classification_report(y_true, y_pred, target_names, filename="model_report.csv"):
+    # 1. Generate the report as a dictionary
+    report_dict = classification_report(y_true, y_pred, 
+                                        target_names=target_names, 
+                                        output_dict=True)
+    
+    # 2. Convert to DataFrame
+    report_df = pd.DataFrame(report_dict).transpose()
+    
+    # 3. Format the numbers (optional, but looks better in tables)
+    report_df = report_df.round(4)
+    
+    # 4. Save to CSV
+    import os
+    os.makedirs("classification_reports", exist_ok=True)
+    save_path = Path("./classification_reports") / filename
+    report_df.to_csv(save_path)
+    
+    print(f"Report saved to {save_path}")
+    return report_df
 
 # ****************************************************************
 # Machine Learning - Random Forest Classifier 
@@ -178,30 +210,84 @@ df_X_features_test = X_test_pca
 # n_estimators=100 is a good start; random_state ensures reproducibility
 rf_model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
 
+# 2. Define the 'grid' of parameters
+param_grid = {
+    'n_estimators': [200,400,600,800],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5, 10],
+    'max_features': ['sqrt', 'log2']
+}
+
+# 3. Setup the GridSearch with Cross-Validation
+# cv=5 means it will split your data 5 times to validate each combo
+grid_search = GridSearchCV(estimator=rf_model, param_grid=param_grid, n_jobs=-1, verbose=0)
+
+# 4. Fit it to your training data
+grid_search.fit(df_X_features_train, df_y_train.values.ravel())
+
+# View the best parameters
+print(f"Best Parameters: {grid_search.best_params_}")
+
+# Use the best model immediately
+best_rf = grid_search.best_estimator_
+
+# best_rf = rf_model 
 # Train the model
-rf_model.fit(df_X_features_train, df_y_train.values.ravel())
+best_rf.fit(df_X_features_train, df_y_train.values.ravel())
+
 
 # Make predictions
-y_pred = rf_model.predict(df_X_features_test)
+y_pred = best_rf.predict(df_X_features_test)
 
 # Check results
 print("RF Model")
+# used to check for overfitting
+y_train_pred = best_rf.predict(df_X_features_train)
+print(f"Training accuracy: {accuracy_score(df_y_train, y_train_pred):.4f}")
 print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
-print(classification_report(df_y_test, y_pred))
+print(save_classification_report(df_y_test, y_pred, target_names=activity_names, filename="rf_diy_pca.csv"))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
-
 # ****************************************************************
 # Machine Learning -  XGBoost 
 xgb_model = XGBClassifier(n_estimators=200, max_depth=5, n_jobs=2)
-xgb_model.fit(df_X_features_train, df_y_train.values.ravel())
-y_pred = xgb_model.predict(df_X_features_test)
+# xgb_model.fit(df_X_features_train, df_y_train.values.ravel())
+# y_pred = xgb_model.predict(df_X_features_test)
 
+# 2. Define the 'grid' of parameters
+param_grid = {
+    'n_estimators': [100, 300, 500],
+    'max_depth': [3,5,7,10],
+    'n_jobs': [2, 5, 8],
+}
+
+# 3. Setup the GridSearch with Cross-Validation
+# cv=5 means it will split your data 5 times to validate each combo
+grid_search = GridSearchCV(estimator=xgb_model, param_grid=param_grid, n_jobs=-1, verbose=0)
+
+# 4. Fit it to your training data
+grid_search.fit(df_X_features_train, df_y_train.values.ravel())
+
+# View the best parameters
+print(f"Best Parameters: {grid_search.best_params_}")
+
+# Use the best model immediately
+best_xgb = grid_search.best_estimator_
+
+# best_xgb = xgb_model
+
+# Train the model
+best_xgb.fit(df_X_features_train, df_y_train.values.ravel())
+
+# Make predictions
+y_pred = best_xgb.predict(df_X_features_test)
 # Check results
 print("XGBoost Model")
+y_train_pred = best_xgb.predict(df_X_features_train)
+print(f"Training accuracy: {accuracy_score(df_y_train, y_train_pred):.4f}")
 print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
-print(classification_report(df_y_test, y_pred))
+print(save_classification_report(df_y_test, y_pred, target_names=activity_names, filename="xgboost_diy_pca.csv"))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
@@ -209,13 +295,41 @@ print(cm)
 # ****************************************************************
 # Machine Learning -  K Nearest Neighbors  
 knn_model = KNeighborsClassifier(n_neighbors=5, weights='distance', algorithm='auto', leaf_size=30, p=2, metric='minkowski', metric_params=None, n_jobs=None)
-knn_model.fit(df_X_features_train, df_y_train.values.ravel())
-y_pred = knn_model.predict(df_X_features_test)
+# knn_model.fit(df_X_features_train, df_y_train.values.ravel())
+# y_pred = knn_model.predict(df_X_features_test)
+
+# 2. Define the 'grid' of parameters
+param_grid = {
+    'weights': ['uniform', 'distance'],
+    'leaf_size': [20, 10, 30,40],
+}
+
+# 3. Setup the GridSearch with Cross-Validation
+# cv=5 means it will split your data 5 times to validate each combo
+grid_search = GridSearchCV(estimator=knn_model, param_grid=param_grid, n_jobs=-1, verbose=0)
+
+# 4. Fit it to your training data
+grid_search.fit(df_X_features_train, df_y_train.values.ravel())
+
+# View the best parameters
+print(f"Best Parameters: {grid_search.best_params_}")
+
+# Use the best model immediately
+best_knn = grid_search.best_estimator_
+
+# best_knn = knn_model
+# Train the model
+best_knn.fit(df_X_features_train, df_y_train.values.ravel())
+
+# Make predictions
+y_pred = best_knn.predict(df_X_features_test)
 
 # Check results
 print("KNN Model")
+y_train_pred = best_knn.predict(df_X_features_train)
+print(f"Training accuracy: {accuracy_score(df_y_train, y_train_pred):.4f}")
 print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
-print(classification_report(df_y_test, y_pred))
+print(save_classification_report(df_y_test, y_pred, target_names=activity_names, filename="knn_diy_pca.csv"))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
@@ -223,13 +337,42 @@ print(cm)
 # ****************************************************************
 # Machine Learning -  Support Vector Matrix
 svm_model = svm.SVC(gamma='scale', probability=True)
-svm_model.fit(df_X_features_train, df_y_train.values.ravel())
-y_pred = svm_model.predict(df_X_features_test)
+# svm_model.fit(df_X_features_train, df_y_train.values.ravel())
+# y_pred = svm_model.predict(df_X_features_test)
+
+# 2. Define the 'grid' of parameters
+param_grid = {
+    'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
+    'gamma': ['scale', 'auto'],
+}
+
+# 3. Setup the GridSearch with Cross-Validation
+# cv=5 means it will split your data 5 times to validate each combo
+grid_search = GridSearchCV(estimator=svm_model, param_grid=param_grid, n_jobs=-1, verbose=0)
+
+# 4. Fit it to your training data
+grid_search.fit(df_X_features_train, df_y_train.values.ravel())
+
+# View the best parameters
+print(f"Best Parameters: {grid_search.best_params_}")
+
+# Use the best model immediately
+best_svm = grid_search.best_estimator_
+
+# best_svm = svm_model
+
+# Train the model
+best_svm.fit(df_X_features_train, df_y_train.values.ravel())
+
+# Make predictions
+y_pred = best_svm.predict(df_X_features_test)
 
 # Check results
 print("SVM Model")
+y_train_pred = best_svm.predict(df_X_features_train)
+print(f"Training accuracy: {accuracy_score(df_y_train, y_train_pred):.4f}")
 print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
-print(classification_report(df_y_test, y_pred))
+print(save_classification_report(df_y_test, y_pred, target_names=activity_names, filename="svm_diy_pca.csv"))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)

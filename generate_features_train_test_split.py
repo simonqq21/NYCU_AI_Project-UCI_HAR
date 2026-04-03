@@ -266,7 +266,7 @@ def add_shift(data, shift_max=10):
         shifted_data = pd.DataFrame(np.roll(data, shift, axis=1), columns=cols)
     return shifted_data
 
-augment_data = True 
+augment_data = False 
 if augment_data:
     df_X_acc_x_total_jitter = add_jitter(df_X_acc_x_total_train)
     df_X_acc_y_total_jitter = add_jitter(df_X_acc_y_total_train)
