@@ -1,5 +1,5 @@
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, LSTM
 import tensorflow as tf
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import confusion_matrix
@@ -7,6 +7,8 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 from pathlib import Path
@@ -112,9 +114,12 @@ def load_and_scale_cnn_data(X_dict, y, scalers_dict, transform=False):
 X_train_cnn, y_train_cnn = load_and_scale_cnn_data(time_series_train, df_y_train, scalers)
 X_test_cnn, y_test_cnn = load_and_scale_cnn_data(time_series_test, df_y_test, scalers, transform=True)
 
-# Initialize the classifier
+
+# ****************************************************************
+# Machine Learning - Random Forest Classifier 
+# Initialize the random forest classifier
 # n_estimators=100 is a good start; random_state ensures reproducibility
-rf_model = RandomForestClassifier(n_estimators=400, random_state=42, n_jobs=-1)
+rf_model = RandomForestClassifier(n_estimators=800, random_state=42, n_jobs=-1)
 
 # Train the model
 rf_model.fit(df_X_features_train, df_y_train.values.ravel())
@@ -123,11 +128,62 @@ rf_model.fit(df_X_features_train, df_y_train.values.ravel())
 y_pred = rf_model.predict(df_X_features_test)
 
 # Check results
+print("RF Model")
 print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
 print(classification_report(df_y_test, y_pred))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
+
+# ****************************************************************
+# Machine Learning -  XGBoost 
+xgb_model = XGBClassifier(n_estimators=800, max_depth=10, n_jobs=2)
+xgb_model.fit(df_X_features_train, df_y_train.values.ravel())
+y_pred = xgb_model.predict(df_X_features_test)
+
+# Check results
+print("XGBoost Model")
+print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
+print(classification_report(df_y_test, y_pred))
+# y_test are the true labels, y_pred are the model's predictions
+cm = confusion_matrix(df_y_test, y_pred)
+print(cm)
+
+# ****************************************************************
+# Machine Learning -  K Nearest Neighbors  
+knn_model = KNeighborsClassifier(n_neighbors=5, weights='distance', algorithm='auto', leaf_size=30, p=2, metric='minkowski', metric_params=None, n_jobs=None)
+knn_model.fit(df_X_features_train, df_y_train.values.ravel())
+y_pred = knn_model.predict(df_X_features_test)
+
+# Check results
+print("KNN Model")
+print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
+print(classification_report(df_y_test, y_pred))
+# y_test are the true labels, y_pred are the model's predictions
+cm = confusion_matrix(df_y_test, y_pred)
+print(cm)
+# ****************************************************************
+# Deep Learning - CNN LSTM 
+
+def build_LSTM_model(input_shape, num_classes, n_hidden=32):
+    # Initiliazing the sequential model
+    model = Sequential()
+    # Configuring the parameters
+    model.add(LSTM(n_hidden, input_shape = input_shape))
+    # Adding a dropout layer
+    model.add(Dropout(0.5))
+    # Adding a dense output layer with sigmoid activation
+    model.add(Dense(num_classes, activation='sigmoid'))
+    # model.summary()
+    
+
+# Compiling the model
+    model.compile(loss='sparse_categorical_crossentropy',
+              optimizer='rmsprop',
+              metrics=['accuracy'])
+
+
+    return model 
 
 
 def build_har_model(input_shape, num_classes):
@@ -142,19 +198,20 @@ def build_har_model(input_shape, num_classes):
         MaxPooling1D(pool_size=2),
         
         Flatten(),
-        Dense(100, activation='relu'),
+        Dense(100, activation='leaky_relu'),
         Dense(num_classes, activation='softmax') # Softmax for multi-class
     ])
     
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4), metrics=['accuracy'])
     return model
 
 # Initialize (6 axes, 5 activities)
-model = build_har_model((128, 9), 5)
+# model = build_har_model((128, 9), 5)
+model = build_LSTM_model((128, 9), 5)
 model.summary()
 
 # C. Build and Train your 1D-CNN
-model.fit(X_train_cnn, y_train_cnn, epochs=500, batch_size=16, verbose=1)
+model.fit(X_train_cnn, y_train_cnn, epochs=40, batch_size=32, verbose=1, shuffle=True)
 
 # D. Evaluate
 
@@ -189,6 +246,67 @@ print(cm)
 
 
 pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # def build_cnn_model(input_shape, num_classes):
 #     model = Sequential([
 #         # 1. First Convolutional Block

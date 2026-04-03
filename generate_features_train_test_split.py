@@ -213,30 +213,108 @@ for selected_activity_dir in selected_activities:
     except FileNotFoundError:
         print("empty folder")
 
-# testing 
-print(f"{df_X_acc_x_total_train.shape}")
-print(f"{df_X_acc_y_total_train.shape}")
-print(f"{df_X_acc_z_total_train.shape}")
-print(f"{df_X_acc_x_gravity_train.shape}")
-print(f"{df_X_acc_y_gravity_train.shape}")
-print(f"{df_X_acc_z_gravity_train.shape}")
-print(f"{df_X_rot_x_total_train.shape}")
-print(f"{df_X_rot_y_total_train.shape}")
-print(f"{df_X_rot_z_total_train.shape}")
-print(f"{df_y_train.shape}")
+# testing
+def print_dataset_size(): 
+    print(f"{df_X_acc_x_total_train.shape}")
+    print(f"{df_X_acc_y_total_train.shape}")
+    print(f"{df_X_acc_z_total_train.shape}")
+    print(f"{df_X_acc_x_gravity_train.shape}")
+    print(f"{df_X_acc_y_gravity_train.shape}")
+    print(f"{df_X_acc_z_gravity_train.shape}")
+    print(f"{df_X_rot_x_total_train.shape}")
+    print(f"{df_X_rot_y_total_train.shape}")
+    print(f"{df_X_rot_z_total_train.shape}")
+    print(f"{df_y_train.shape}")
 
-print(f"{df_X_acc_x_total_test.shape}")
-print(f"{df_X_acc_y_total_test.shape}")
-print(f"{df_X_acc_z_total_test.shape}")
-print(f"{df_X_acc_x_gravity_test.shape}")
-print(f"{df_X_acc_y_gravity_test.shape}")
-print(f"{df_X_acc_z_gravity_test.shape}")
-print(f"{df_X_rot_x_total_test.shape}")
-print(f"{df_X_rot_y_total_test.shape}")
-print(f"{df_X_rot_z_total_test.shape}")
-print(f"{df_y_test.shape}")
+    print(f"{df_X_acc_x_total_test.shape}")
+    print(f"{df_X_acc_y_total_test.shape}")
+    print(f"{df_X_acc_z_total_test.shape}")
+    print(f"{df_X_acc_x_gravity_test.shape}")
+    print(f"{df_X_acc_y_gravity_test.shape}")
+    print(f"{df_X_acc_z_gravity_test.shape}")
+    print(f"{df_X_rot_x_total_test.shape}")
+    print(f"{df_X_rot_y_total_test.shape}")
+    print(f"{df_X_rot_z_total_test.shape}")
+    print(f"{df_y_test.shape}")
+print_dataset_size()
+# ****************************************************************
+# data augmentation 
 
+cols = df_X_acc_x_total_train.columns
+def add_jitter(data, sigma=0.01):
+    # data shape: (num_windows, 128, 9)
+    noise = np.random.normal(loc=0, scale=sigma, size=data.shape)
+    return data + noise
 
+def add_scaling(data, sigma=0.1):
+    # Generate a random scaling factor for each window
+    scaling_factor = np.random.normal(loc=1.0, scale=sigma, size=(data.shape[0], data.shape[1]))
+    np.random.normal()
+    return data * scaling_factor
+
+def add_shift(data, shift_max=10):
+    shifted_data = np.zeros_like(data)
+    for i in range(data.shape[0]):
+        shift = np.random.randint(-shift_max, shift_max)
+        np.roll
+        shifted_data = pd.DataFrame(np.roll(data, shift, axis=1), columns=cols)
+    return shifted_data
+
+augment_data = True 
+if augment_data:
+    df_X_acc_x_total_jitter = add_jitter(df_X_acc_x_total_train)
+    df_X_acc_y_total_jitter = add_jitter(df_X_acc_y_total_train)
+    df_X_acc_z_total_jitter = add_jitter(df_X_acc_z_total_train)
+    df_X_acc_x_gravity_jitter = add_jitter(df_X_acc_x_gravity_train)
+    df_X_acc_y_gravity_jitter = add_jitter(df_X_acc_y_gravity_train)
+    df_X_acc_z_gravity_jitter = add_jitter(df_X_acc_z_gravity_train)
+    df_X_rot_x_total_jitter = add_jitter(df_X_rot_x_total_train)
+    df_X_rot_y_total_jitter = add_jitter(df_X_rot_y_total_train)
+    df_X_rot_z_total_jitter = add_jitter(df_X_rot_z_total_train)
+
+    df_X_acc_x_total_scale = add_scaling(df_X_acc_x_total_train)
+    df_X_acc_y_total_scale = add_scaling(df_X_acc_y_total_train)
+    df_X_acc_z_total_scale = add_scaling(df_X_acc_z_total_train)
+    df_X_acc_x_gravity_scale = add_scaling(df_X_acc_x_gravity_train)
+    df_X_acc_y_gravity_scale = add_scaling(df_X_acc_y_gravity_train)
+    df_X_acc_z_gravity_scale = add_scaling(df_X_acc_z_gravity_train)
+    df_X_rot_x_total_scale = add_scaling(df_X_rot_x_total_train)
+    df_X_rot_y_total_scale = add_scaling(df_X_rot_y_total_train)
+    df_X_rot_z_total_scale = add_scaling(df_X_rot_z_total_train)
+
+    df_X_acc_x_total_shift = add_shift(df_X_acc_x_total_train)
+    df_X_acc_y_total_shift = add_shift(df_X_acc_y_total_train)
+    df_X_acc_z_total_shift = add_shift(df_X_acc_z_total_train)
+    df_X_acc_x_gravity_shift = add_shift(df_X_acc_x_gravity_train)
+    df_X_acc_y_gravity_shift = add_shift(df_X_acc_y_gravity_train)
+    df_X_acc_z_gravity_shift = add_shift(df_X_acc_z_gravity_train)
+    df_X_rot_x_total_shift = add_shift(df_X_rot_x_total_train)
+    df_X_rot_y_total_shift = add_shift(df_X_rot_y_total_train)
+    df_X_rot_z_total_shift = add_shift(df_X_rot_z_total_train)
+
+    # df_X_acc_x_total
+    # df_X_acc_y_total
+    # df_X_acc_z_total
+    # df_X_acc_x_gravity
+    # df_X_acc_y_gravity
+    # df_X_acc_z_gravity
+    # df_X_rot_x_total
+    # df_X_rot_y_total
+    # df_X_rot_z_total
+
+    df_X_acc_x_total_train = pd.concat((df_X_acc_x_total_train, df_X_acc_x_total_jitter, df_X_acc_x_total_scale, df_X_acc_x_total_shift))
+    df_X_acc_y_total_train = pd.concat((df_X_acc_y_total_train, df_X_acc_y_total_jitter, df_X_acc_y_total_scale, df_X_acc_y_total_shift))
+    df_X_acc_z_total_train = pd.concat((df_X_acc_z_total_train, df_X_acc_z_total_jitter, df_X_acc_z_total_scale, df_X_acc_z_total_shift))
+    df_X_acc_x_gravity_train = pd.concat((df_X_acc_x_gravity_train, df_X_acc_x_gravity_jitter, df_X_acc_x_gravity_scale, df_X_acc_x_gravity_shift))
+    df_X_acc_y_gravity_train = pd.concat((df_X_acc_y_gravity_train, df_X_acc_y_gravity_jitter, df_X_acc_y_gravity_scale, df_X_acc_y_gravity_shift))
+    df_X_acc_z_gravity_train = pd.concat((df_X_acc_z_gravity_train, df_X_acc_z_gravity_jitter, df_X_acc_z_gravity_scale, df_X_acc_z_gravity_shift))
+    df_X_rot_x_total_train = pd.concat((df_X_rot_x_total_train, df_X_rot_x_total_jitter, df_X_rot_x_total_scale, df_X_rot_x_total_shift))
+    df_X_rot_y_total_train = pd.concat((df_X_rot_y_total_train, df_X_rot_y_total_jitter, df_X_rot_y_total_scale, df_X_rot_y_total_shift))
+    df_X_rot_z_total_train = pd.concat((df_X_rot_z_total_train, df_X_rot_z_total_jitter, df_X_rot_z_total_scale, df_X_rot_z_total_shift))
+    df_y_train = pd.concat((df_y_train,df_y_train,df_y_train,df_y_train))
+
+    print_dataset_size()
+    
 # ****************************************************************
 # Feature Extraction
 # calculate features
@@ -714,6 +792,59 @@ except Exception as e:
     print(f"Error saving scalers: {e}")
 
 pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
