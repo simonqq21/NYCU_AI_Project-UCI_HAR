@@ -9,7 +9,7 @@ import os
 dataset_dir = Path("./raw_dataset/")
 # Set experiment type and index 
 # cycling, running, jumprope, upstairs, downstairs
-experiment_type = "downstairs"
+experiment_type = "cycling"
 experiment_index = 2
 # train or test 
 experiment_train_test = "test"

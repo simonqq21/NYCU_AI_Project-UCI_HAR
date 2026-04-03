@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn import svm
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 from pathlib import Path
@@ -86,6 +87,37 @@ scalers = joblib.load(scalers_path)
 # Example: Accessing the X-axis Accelerometer mean
 print(f"Mean for Acc X: {scalers['acc_x_total'].mean_}")
 
+# ****************************************************************
+# load UCI-HAR 
+def load_har_dataset(path='./UCI_HAR2/'):
+    # Load feature names
+    # features = pd.read_csv(path + 'features.txt', sep='\s+', header=None, names=['ID', 'Name'])
+    
+    # Load Training Data
+    X_train = pd.read_csv(path + 'train/X_train.txt', sep='\s+',header=None, dtype=np.float64)
+    y_train = pd.read_csv(path + 'train/y_train.txt', sep='\s+',header=None)
+    
+    # Load Testing Data
+    X_test = pd.read_csv(path + 'test/X_test.txt', sep='\s+',header=None, dtype=np.float64)
+    y_test = pd.read_csv(path + 'test/y_test.txt', sep='\s+',header=None)
+    
+    # # Assign feature names to columns
+    # X_train.columns = features['Name']
+    # X_test.columns = features['Name']
+    
+    return (X_train, y_train), (X_test, y_test)
+
+(X_train, y_train), (X_test, y_test) = load_har_dataset()
+
+test_with_uci_har = True 
+if test_with_uci_har:
+    df_X_features_train = X_train
+    df_y_train = y_train - 1
+    df_X_features_test = X_test
+    df_y_test = y_test - 1
+    
+# ****************************************************************
+# load and scale data for CNN 
 def load_and_scale_cnn_data(X_dict, y, scalers_dict, transform=False):
     temp_stacked = []
     for axis, data in X_dict.items():
@@ -114,12 +146,37 @@ def load_and_scale_cnn_data(X_dict, y, scalers_dict, transform=False):
 X_train_cnn, y_train_cnn = load_and_scale_cnn_data(time_series_train, df_y_train, scalers)
 X_test_cnn, y_test_cnn = load_and_scale_cnn_data(time_series_test, df_y_test, scalers, transform=True)
 
+# ****************************************************************
+# Perform PCA for dimensionality reduction 
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+
+# 1. Scale the features (Mandatory for PCA)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(df_X_features_train)
+X_test_scaled = scaler.transform(df_X_features_test)
+
+# 2. Initialize PCA
+# Setting n_components to a float (0.95) tells PCA to select enough 
+# components to explain 95% of the variance in your data.
+pca = PCA(n_components=0.95)
+
+# 3. Fit on Train, Transform both
+X_train_pca = pca.fit_transform(X_train_scaled)
+X_test_pca = pca.transform(X_test_scaled)
+
+print(f"Original feature count: {df_X_features_train.shape[1]}")
+print(f"Reduced feature count: {pca.n_components_}")
+
+df_X_features_train = X_train_pca
+df_X_features_test = X_test_pca
 
 # ****************************************************************
 # Machine Learning - Random Forest Classifier 
 # Initialize the random forest classifier
 # n_estimators=100 is a good start; random_state ensures reproducibility
-rf_model = RandomForestClassifier(n_estimators=800, random_state=42, n_jobs=-1)
+rf_model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
 
 # Train the model
 rf_model.fit(df_X_features_train, df_y_train.values.ravel())
@@ -137,7 +194,7 @@ print(cm)
 
 # ****************************************************************
 # Machine Learning -  XGBoost 
-xgb_model = XGBClassifier(n_estimators=800, max_depth=10, n_jobs=2)
+xgb_model = XGBClassifier(n_estimators=200, max_depth=5, n_jobs=2)
 xgb_model.fit(df_X_features_train, df_y_train.values.ravel())
 y_pred = xgb_model.predict(df_X_features_test)
 
@@ -162,86 +219,99 @@ print(classification_report(df_y_test, y_pred))
 # y_test are the true labels, y_pred are the model's predictions
 cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
+
 # ****************************************************************
-# Deep Learning - CNN LSTM 
+# Machine Learning -  Support Vector Matrix
+svm_model = svm.SVC(gamma='scale', probability=True)
+svm_model.fit(df_X_features_train, df_y_train.values.ravel())
+y_pred = svm_model.predict(df_X_features_test)
 
-def build_LSTM_model(input_shape, num_classes, n_hidden=32):
-    # Initiliazing the sequential model
-    model = Sequential()
-    # Configuring the parameters
-    model.add(LSTM(n_hidden, input_shape = input_shape))
-    # Adding a dropout layer
-    model.add(Dropout(0.5))
-    # Adding a dense output layer with sigmoid activation
-    model.add(Dense(num_classes, activation='sigmoid'))
-    # model.summary()
-    
-
-# Compiling the model
-    model.compile(loss='sparse_categorical_crossentropy',
-              optimizer='rmsprop',
-              metrics=['accuracy'])
-
-
-    return model 
-
-
-def build_har_model(input_shape, num_classes):
-    model = Sequential([
-        # First Convolutional Layer
-        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=input_shape),
-        MaxPooling1D(pool_size=2),
-        Dropout(0.5),
-        
-        # Second Convolutional Layer
-        Conv1D(filters=64, kernel_size=3, activation='relu'),
-        MaxPooling1D(pool_size=2),
-        
-        Flatten(),
-        Dense(100, activation='leaky_relu'),
-        Dense(num_classes, activation='softmax') # Softmax for multi-class
-    ])
-    
-    model.compile(loss='sparse_categorical_crossentropy', optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4), metrics=['accuracy'])
-    return model
-
-# Initialize (6 axes, 5 activities)
-# model = build_har_model((128, 9), 5)
-model = build_LSTM_model((128, 9), 5)
-model.summary()
-
-# C. Build and Train your 1D-CNN
-model.fit(X_train_cnn, y_train_cnn, epochs=40, batch_size=32, verbose=1, shuffle=True)
-
-# D. Evaluate
-
-loss, acc = model.evaluate(X_test_cnn, y_test_cnn, verbose=1)
-print(loss)
-print(acc)
-
-
-
-# 1. Get raw probabilities: shape (num_windows, num_classes)
-y_prob = model.predict(X_train_cnn)
-
-# 2. Convert probabilities to class labels (index of the max value)
-y_pred = np.argmax(y_prob, axis=1)
-
+# Check results
+print("SVM Model")
+print(f"Accuracy: {accuracy_score(df_y_test, y_pred):.4f}")
+print(classification_report(df_y_test, y_pred))
 # y_test are the true labels, y_pred are the model's predictions
-cm = confusion_matrix(y_train_cnn, y_pred)
+cm = confusion_matrix(df_y_test, y_pred)
 print(cm)
 
+# # ****************************************************************
+# # Deep Learning - CNN LSTM 
+
+# def build_LSTM_model(input_shape, num_classes, n_hidden=32):
+#     # Initiliazing the sequential model
+#     model = Sequential()
+#     # Configuring the parameters
+#     model.add(LSTM(n_hidden, input_shape = input_shape))
+#     # Adding a dropout layer
+#     model.add(Dropout(0.5))
+#     # Adding a dense output layer with sigmoid activation
+#     model.add(Dense(num_classes, activation='sigmoid'))
+#     # model.summary()
+    
+
+# # Compiling the model
+#     model.compile(loss='sparse_categorical_crossentropy',
+#               optimizer='rmsprop',
+#               metrics=['accuracy'])
 
 
-# 1. Get raw probabilities: shape (num_windows, num_classes)
-y_prob = model.predict(X_test_cnn)
+#     return model 
 
-# 2. Convert probabilities to class labels (index of the max value)
-y_pred = np.argmax(y_prob, axis=1)
 
-# y_test are the true labels, y_pred are the model's predictions
-cm = confusion_matrix(y_test_cnn, y_pred)
-print(cm)
+# def build_har_model(input_shape, num_classes):
+#     model = Sequential([
+#         # First Convolutional Layer
+#         Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=input_shape),
+#         MaxPooling1D(pool_size=2),
+#         Dropout(0.5),
+        
+#         # Second Convolutional Layer
+#         Conv1D(filters=64, kernel_size=3, activation='relu'),
+#         MaxPooling1D(pool_size=2),
+        
+#         Flatten(),
+#         Dense(100, activation='leaky_relu'),
+#         Dense(num_classes, activation='softmax') # Softmax for multi-class
+#     ])
+    
+#     model.compile(loss='sparse_categorical_crossentropy', optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4), metrics=['accuracy'])
+#     return model
+
+# # Initialize (6 axes, 5 activities)
+# # model = build_har_model((128, 9), 5)
+# model = build_LSTM_model((128, 9), 5)
+# model.summary()
+
+# # C. Build and Train your 1D-CNN
+# model.fit(X_train_cnn, y_train_cnn, epochs=40, batch_size=32, verbose=1, shuffle=True)
+
+# # D. Evaluate
+
+# loss, acc = model.evaluate(X_test_cnn, y_test_cnn, verbose=1)
+# print(loss)
+# print(acc)
+
+# # 1. Get raw probabilities: shape (num_windows, num_classes)
+# y_prob = model.predict(X_train_cnn)
+
+# # 2. Convert probabilities to class labels (index of the max value)
+# y_pred = np.argmax(y_prob, axis=1)
+
+# # y_test are the true labels, y_pred are the model's predictions
+# cm = confusion_matrix(y_train_cnn, y_pred)
+# print(cm)
+
+
+
+# # 1. Get raw probabilities: shape (num_windows, num_classes)
+# y_prob = model.predict(X_test_cnn)
+
+# # 2. Convert probabilities to class labels (index of the max value)
+# y_pred = np.argmax(y_prob, axis=1)
+
+# # y_test are the true labels, y_pred are the model's predictions
+# cm = confusion_matrix(y_test_cnn, y_pred)
+# print(cm)
 
 
 

@@ -152,6 +152,12 @@ for selected_activity_dir in selected_activities:
         acc_x_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_x_gravity_{activity_train_test}.csv")).iloc[:,1:]
         acc_y_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_y_gravity_{activity_train_test}.csv")).iloc[:,1:]
         acc_z_gravity_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_acc_z_gravity_{activity_train_test}.csv")).iloc[:,1:]
+
+        # get body acc from total acceleration and gravity acceleration
+        acc_x_total_df = acc_x_total_df - acc_x_gravity_df
+        acc_y_total_df = acc_y_total_df - acc_y_gravity_df
+        acc_z_total_df = acc_z_total_df - acc_z_gravity_df
+        
         rot_x_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_x_total_{activity_train_test}.csv")).iloc[:,1:]
         rot_y_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_y_total_{activity_train_test}.csv")).iloc[:,1:]
         rot_z_total_df = pd.read_csv(Path(selected_activity_dir, f"{activity_name_index}_rot_z_total_{activity_train_test}.csv")).iloc[:,1:]
@@ -424,6 +430,18 @@ def compute_features(data):
     df_X_features["acc_total_sma"] = get_sma(df_acc_x_total, df_acc_y_total, df_acc_z_total)
     df_X_features["acc_gravity_sma"] = get_sma(df_acc_x_gravity, df_acc_y_gravity, df_acc_z_gravity)
     df_X_features["rot_total_sma"] = get_sma(df_rot_x_total, df_rot_y_total, df_rot_z_total)
+    # correlation 
+    def get_correlation(a, b):
+        return a.corrwith(b, axis=1)
+    df_X_features["acc_x_y_total_corr"] = get_correlation(df_acc_x_total, df_acc_y_total)
+    df_X_features["acc_y_z_total_corr"] = get_correlation(df_acc_y_total, df_acc_z_total)
+    df_X_features["acc_x_z_total_corr"] = get_correlation(df_acc_z_total, df_acc_x_total)
+    df_X_features["acc_x_y_gravity_corr"] = get_correlation(df_acc_x_gravity, df_acc_y_gravity)
+    df_X_features["acc_y_z_gravity_corr"] = get_correlation(df_acc_y_gravity, df_acc_z_gravity)
+    df_X_features["acc_x_z_gravity_corr"] = get_correlation(df_acc_z_gravity, df_acc_x_gravity)
+    df_X_features["rot_x_y_total_corr"] = get_correlation(df_rot_x_total, df_rot_y_total)
+    df_X_features["rot_y_z_total_corr"] = get_correlation(df_rot_y_total, df_rot_z_total)
+    df_X_features["rot_x_z_total_corr"] = get_correlation(df_rot_z_total, df_rot_x_total)
     # energy
     def get_energy(data):
         return np.mean(np.square(data.to_numpy()), axis=1)
@@ -521,15 +539,7 @@ def compute_features(data):
     # mean gravity
     df_X_features["acc_gravity_mean"] = (df_acc_x_gravity + df_acc_y_gravity + df_acc_z_gravity).mean(axis=1)/3
     # 
-    # df_X_features["acc_x_total_"] = df_acc_x_total.max()
-    # df_X_features["acc_y_total_"] = df_acc_y_total.
-    # df_X_features["acc_z_total_"] = df_acc_z_total.
-    # df_X_features["acc_x_gravity_"] = df_acc_x_gravity.
-    # df_X_features["acc_y_gravity_"] = df_acc_y_gravity.
-    # df_X_features["acc_z_gravity_"] = df_acc_z_gravity.
-    # df_X_features["rot_x_total_"] = df_rot_x_total.
-    # df_X_features["rot_y_total_"] = df_rot_y_total.
-    # df_X_features["rot_z_total_"] = df_rot_z_total.
+
 
     # df_X_features["acc_x_total_"] = df_acc_x_total.max()
     # df_X_features["acc_y_total_"] = df_acc_y_total.
